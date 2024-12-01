@@ -1,4 +1,3 @@
 [build]
-rustflags = [
-    "--cfg=web_sys_unstable_apis",
-]
+# disable this if you need some kind of portable build!
+# rustflags = "-C target-cpu=native"
