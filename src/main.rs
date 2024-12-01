@@ -46,7 +46,8 @@ mod winit {
             std::env::args().nth(1).unwrap()
         } else {
             // "examples/default.wgsl".to_string()
-            "examples/davidar/buddhabrot.wgsl".to_string()
+            // "examples/davidar/buddhabrot.wgsl".to_string()
+            "examples/spectral_clusters.wgsl".to_string()
         };
         let shader = std::fs::read_to_string(&filename)?;
 

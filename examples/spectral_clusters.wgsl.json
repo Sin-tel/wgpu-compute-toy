@@ -1,0 +1,18 @@
+{
+    "uniforms": [
+        {
+            "name": "exposure",
+            "value": -2.3
+        },
+        {
+            "name": "focus",
+            "value": -0.16
+        },
+        {
+            "name": "P",
+            "value": -0.75
+        }
+    ],
+    "textures": [],
+    "float32Enabled": false
+}
