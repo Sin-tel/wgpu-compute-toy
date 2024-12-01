@@ -2,7 +2,6 @@ use crate::{
     bind::NUM_ASSERT_COUNTERS,
     utils::{fetch_include, parse_u32},
 };
-use async_recursion::async_recursion;
 use itertools::Itertools;
 use lazy_regex::*;
 use std::collections::HashMap;
@@ -104,15 +103,14 @@ impl Preprocessor {
             .to_string()
     }
 
-    async fn preprocess(&mut self, shader: &str) -> Result<(), WGSLError> {
+    fn preprocess(&mut self, shader: &str) -> Result<(), WGSLError> {
         for (line, n) in shader.lines().zip(1..) {
-            self.process_line(line, n).await?
+            self.process_line(line, n)?
         }
         Ok(())
     }
 
-    #[async_recursion(?Send)]
-    async fn process_line(&mut self, line_orig: &str, n: usize) -> Result<(), WGSLError> {
+    fn process_line(&mut self, line_orig: &str, n: usize) -> Result<(), WGSLError> {
         let mut line = self.subst_defines(line_orig);
         if line.trim_start().starts_with("enable") {
             line = RE_COMMENT.replace(&line, "").to_string();
@@ -136,14 +134,14 @@ impl Preprocessor {
                                 if path == "string" {
                                     self.special_strings = true;
                                 }
-                                fetch_include(format!("std/{path}")).await
+                                fetch_include(format!("std/{path}"))
                             }
                         },
-                        Some(cap) => fetch_include(cap[1].to_string()).await,
+                        Some(cap) => fetch_include(cap[1].to_string()),
                     };
                     if let Some(code) = include {
                         for line in code.lines() {
-                            self.process_line(line, n).await?
+                            self.process_line(line, n)?
                         }
                     } else {
                         return Err(WGSLError::new(format!("Cannot find include {name}"), n));
@@ -263,8 +261,8 @@ impl Preprocessor {
         Ok(())
     }
 
-    pub async fn run(&mut self, shader: &str) -> Option<SourceMap> {
-        match self.preprocess(shader).await {
+    pub fn run(&mut self, shader: &str) -> Option<SourceMap> {
+        match self.preprocess(shader) {
             Ok(()) => Some(std::mem::take(&mut self.source)),
             Err(e) => {
                 e.submit();

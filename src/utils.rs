@@ -1,4 +1,4 @@
-use crate::WGSLError;
+use crate::pp::WGSLError;
 
 pub fn parse_u32(value: &str, line: usize) -> Result<u32, WGSLError> {
     let value = value.trim().trim_end_matches('u');
@@ -13,8 +13,7 @@ pub fn parse_u32(value: &str, line: usize) -> Result<u32, WGSLError> {
     )))
 }
 
-
-pub async fn fetch_include(name: String) -> Option<String> {
+pub fn fetch_include(name: String) -> Option<String> {
     let filename = format!("./include/{name}.wgsl");
     std::fs::read_to_string(filename).ok()
 }

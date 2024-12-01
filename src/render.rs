@@ -1,13 +1,9 @@
-mod bind;
-mod blit;
-pub mod context;
-mod pp;
-mod utils;
-
-use context::init_wgpu;
-use context::WgpuContext;
+use crate::blit;
+use crate::pp;
+use crate::bind;
+use crate::context::WgpuContext;
+use crate::pp::{SourceMap, WGSLError};
 use lazy_regex::regex;
-use pp::{SourceMap, WGSLError};
 use wgpu::PipelineCompilationOptions;
 use std::collections::HashMap;
 use std::mem::{size_of, take};
@@ -15,7 +11,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 
 struct ComputePipeline {
+    #[allow(dead_code)]
     name: String,
+
     workgroup_size: [u32; 3],
     workgroup_count: Option<[u32; 3]>,
     dispatch_once: bool,
@@ -50,15 +48,6 @@ fn count_newlines(s: &str) -> usize {
     s.as_bytes().iter().filter(|&&c| c == b'\n').count()
 }
 
-// FIXME: async fn(&str) doesn't currently work with wasm_bindgen: https://stackoverflow.com/a/63655324/78204
-pub async fn create_renderer(
-    width: u32,
-    height: u32,
-    bind_id: String,
-) -> Result<WgpuToyRenderer, String> {
-    let wgpu = init_wgpu(width, height, &bind_id).await?;
-    Ok(WgpuToyRenderer::new(wgpu))
-}
 
 impl WgpuToyRenderer {
     pub fn new(wgpu: WgpuContext) -> WgpuToyRenderer {
@@ -81,7 +70,6 @@ impl WgpuToyRenderer {
             screen_blitter: blit::Blitter::new(
                 &wgpu,
                 bindings.tex_screen.view(),
-                blit::ColourSpace::Linear,
                 wgpu.surface_config.format,
                 wgpu::FilterMode::Nearest,
             ),
@@ -95,7 +83,6 @@ impl WgpuToyRenderer {
     }
 }
 
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 impl WgpuToyRenderer {
     pub async fn render_async(&mut self) {
         use wgpu::SurfaceError;
@@ -125,12 +112,6 @@ impl WgpuToyRenderer {
         }
     }
 
-    pub fn render_to_surface(
-        &mut self,
-        frame: &wgpu::SurfaceTexture,
-    ) -> (Option<wgpu::Buffer>, wgpu::SubmissionIndex) {
-        self.render_to(frame)
-    }
 
     fn render_to(
         &mut self,
@@ -389,13 +370,13 @@ fn passSampleLevelBilinearRepeat(pass_index: int, uv: float2, lod: float) -> flo
         log::info!("Entry points: {:?}", entry_points);
     }
 
-    pub async fn preprocess_async(&self, shader: &str) -> Option<SourceMap> {
+    pub fn preprocess(&self, shader: &str) -> Option<SourceMap> {
         let shader = shader.to_owned();
         let defines = HashMap::from([
             ("SCREEN_WIDTH".to_owned(), self.screen_width.to_string()),
             ("SCREEN_HEIGHT".to_owned(), self.screen_height.to_string()),
         ]);
-        pp::Preprocessor::new(defines).run(&shader).await
+        pp::Preprocessor::new(defines).run(&shader)
     }
 
     pub fn compile(&mut self, source: SourceMap) {
@@ -509,9 +490,9 @@ fn passSampleLevelBilinearRepeat(pass_index: int, uv: float2, lod: float) -> flo
         self.bindings.time.host.elapsed = t;
     }
 
-    pub fn set_time_delta(&mut self, t: f32) {
-        self.bindings.time.host.delta = t;
-    }
+    // pub fn set_time_delta(&mut self, t: f32) {
+    //     self.bindings.time.host.delta = t;
+    // }
 
     pub fn set_mouse_pos(&mut self, x: f32, y: f32) {
         if self.bindings.mouse.host.click == 1 {
@@ -526,9 +507,9 @@ fn passSampleLevelBilinearRepeat(pass_index: int, uv: float2, lod: float) -> flo
         self.bindings.mouse.host.click = if click { 1 } else { 0 };
     }
 
-    pub fn set_keydown(&mut self, keycode: usize, keydown: bool) {
-        self.bindings.keys.host.set(keycode, keydown);
-    }
+    // pub fn set_keydown(&mut self, keycode: usize, keydown: bool) {
+    //     self.bindings.keys.host.set(keycode, keydown);
+    // }
 
     pub fn set_custom_floats(&mut self, names: Vec<String>, values: Vec<f32>) {
         self.bindings.custom.host = (names, values);
@@ -568,122 +549,121 @@ fn passSampleLevelBilinearRepeat(pass_index: int, uv: float2, lod: float) -> flo
         self.screen_blitter = blit::Blitter::new(
             &self.wgpu,
             self.bindings.tex_screen.view(),
-            blit::ColourSpace::Linear,
             self.wgpu.surface_config.format,
             wgpu::FilterMode::Linear,
         );
     }
 
-    pub fn load_channel(&mut self, index: usize, bytes: &[u8]) {
-        let now = instant::Instant::now();
-        match image::load_from_memory(bytes) {
-            Err(e) => log::error!("load_channel: {e}"),
-            Ok(im) => {
-                use image::GenericImageView;
-                let (width, height) = im.dimensions();
-                self.bindings.channels[index].set_texture(
-                    blit::Blitter::new(
-                        &self.wgpu,
-                        &create_texture_from_image(
-                            &self.wgpu,
-                            &im.to_rgba8(),
-                            width,
-                            height,
-                            wgpu::TextureFormat::Rgba8UnormSrgb,
-                        )
-                        .create_view(&Default::default()),
-                        blit::ColourSpace::Linear,
-                        wgpu::TextureFormat::Rgba8UnormSrgb,
-                        wgpu::FilterMode::Linear,
-                    )
-                    .create_texture(
-                        &self.wgpu,
-                        width,
-                        height,
-                        1 + (std::cmp::max(width, height) as f32).log2() as u32,
-                    ),
-                );
-                self.compute_bind_group = self
-                    .bindings
-                    .create_bind_group(&self.wgpu, &self.compute_bind_group_layout);
-            }
-        }
-        log::info!("Channel {index} loaded in {}s", now.elapsed().as_secs_f32());
-    }
+    // pub fn load_channel(&mut self, index: usize, bytes: &[u8]) {
+    //     let now = instant::Instant::now();
+    //     match image::load_from_memory(bytes) {
+    //         Err(e) => log::error!("load_channel: {e}"),
+    //         Ok(im) => {
+    //             use image::GenericImageView;
+    //             let (width, height) = im.dimensions();
+    //             self.bindings.channels[index].set_texture(
+    //                 blit::Blitter::new(
+    //                     &self.wgpu,
+    //                     &create_texture_from_image(
+    //                         &self.wgpu,
+    //                         &im.to_rgba8(),
+    //                         width,
+    //                         height,
+    //                         wgpu::TextureFormat::Rgba8UnormSrgb,
+    //                     )
+    //                     .create_view(&Default::default()),
+    //                     blit::ColourSpace::Linear,
+    //                     wgpu::TextureFormat::Rgba8UnormSrgb,
+    //                     wgpu::FilterMode::Linear,
+    //                 )
+    //                 .create_texture(
+    //                     &self.wgpu,
+    //                     width,
+    //                     height,
+    //                     1 + (std::cmp::max(width, height) as f32).log2() as u32,
+    //                 ),
+    //             );
+    //             self.compute_bind_group = self
+    //                 .bindings
+    //                 .create_bind_group(&self.wgpu, &self.compute_bind_group_layout);
+    //         }
+    //     }
+    //     log::info!("Channel {index} loaded in {}s", now.elapsed().as_secs_f32());
+    // }
 
-    pub fn load_channel_hdr(&mut self, index: usize, bytes: &[u8]) -> Result<(), String> {
-        let now = instant::Instant::now();
-        let decoder = image::codecs::hdr::HdrDecoder::new(bytes).map_err(|e| e.to_string())?;
-        let meta = decoder.metadata();
-        let pixels = decoder.read_image_native().map_err(|e| e.to_string())?;
-        let bytes: Vec<u8> = pixels
-            .iter()
-            .flat_map(|p| [p.c[0], p.c[1], p.c[2], p.e])
-            .collect();
-        self.bindings.channels[index].set_texture(
-            blit::Blitter::new(
-                &self.wgpu,
-                &create_texture_from_image(
-                    &self.wgpu,
-                    &bytes,
-                    meta.width,
-                    meta.height,
-                    wgpu::TextureFormat::Rgba8Unorm,
-                )
-                .create_view(&Default::default()),
-                blit::ColourSpace::Rgbe,
-                wgpu::TextureFormat::Rgba16Float,
-                wgpu::FilterMode::Linear,
-            )
-            .create_texture(
-                &self.wgpu,
-                meta.width,
-                meta.height,
-                1 + (std::cmp::max(meta.width, meta.height) as f32).log2() as u32,
-            ),
-        );
-        self.compute_bind_group = self
-            .bindings
-            .create_bind_group(&self.wgpu, &self.compute_bind_group_layout);
-        log::info!("Channel {index} loaded in {}s", now.elapsed().as_secs_f32());
-        Ok(())
-    }
+    // pub fn load_channel_hdr(&mut self, index: usize, bytes: &[u8]) -> Result<(), String> {
+    //     let now = instant::Instant::now();
+    //     let decoder = image::codecs::hdr::HdrDecoder::new(bytes).map_err(|e| e.to_string())?;
+    //     let meta = decoder.metadata();
+    //     let pixels = decoder.read_image_native().map_err(|e| e.to_string())?;
+    //     let bytes: Vec<u8> = pixels
+    //         .iter()
+    //         .flat_map(|p| [p.c[0], p.c[1], p.c[2], p.e])
+    //         .collect();
+    //     self.bindings.channels[index].set_texture(
+    //         blit::Blitter::new(
+    //             &self.wgpu,
+    //             &create_texture_from_image(
+    //                 &self.wgpu,
+    //                 &bytes,
+    //                 meta.width,
+    //                 meta.height,
+    //                 wgpu::TextureFormat::Rgba8Unorm,
+    //             )
+    //             .create_view(&Default::default()),
+    //             blit::ColourSpace::Rgbe,
+    //             wgpu::TextureFormat::Rgba16Float,
+    //             wgpu::FilterMode::Linear,
+    //         )
+    //         .create_texture(
+    //             &self.wgpu,
+    //             meta.width,
+    //             meta.height,
+    //             1 + (std::cmp::max(meta.width, meta.height) as f32).log2() as u32,
+    //         ),
+    //     );
+    //     self.compute_bind_group = self
+    //         .bindings
+    //         .create_bind_group(&self.wgpu, &self.compute_bind_group_layout);
+    //     log::info!("Channel {index} loaded in {}s", now.elapsed().as_secs_f32());
+    //     Ok(())
+    // }
 }
 
-fn create_texture_from_image(
-    wgpu: &WgpuContext,
-    rgba: &[u8],
-    width: u32,
-    height: u32,
-    format: wgpu::TextureFormat,
-) -> wgpu::Texture {
-    let texture = wgpu.device.create_texture(&wgpu::TextureDescriptor {
-        size: wgpu::Extent3d {
-            width,
-            height,
-            depth_or_array_layers: 1,
-        },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format,
-        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-        label: None,
-        view_formats: &[],
-    });
-    wgpu.queue.write_texture(
-        texture.as_image_copy(),
-        rgba,
-        wgpu::ImageDataLayout {
-            offset: 0,
-            bytes_per_row: Some(4 * width),
-            rows_per_image: Some(height),
-        },
-        wgpu::Extent3d {
-            width,
-            height,
-            depth_or_array_layers: 1,
-        },
-    );
-    texture
-}
+// fn create_texture_from_image(
+//     wgpu: &WgpuContext,
+//     rgba: &[u8],
+//     width: u32,
+//     height: u32,
+//     format: wgpu::TextureFormat,
+// ) -> wgpu::Texture {
+//     let texture = wgpu.device.create_texture(&wgpu::TextureDescriptor {
+//         size: wgpu::Extent3d {
+//             width,
+//             height,
+//             depth_or_array_layers: 1,
+//         },
+//         mip_level_count: 1,
+//         sample_count: 1,
+//         dimension: wgpu::TextureDimension::D2,
+//         format,
+//         usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+//         label: None,
+//         view_formats: &[],
+//     });
+//     wgpu.queue.write_texture(
+//         texture.as_image_copy(),
+//         rgba,
+//         wgpu::ImageDataLayout {
+//             offset: 0,
+//             bytes_per_row: Some(4 * width),
+//             rows_per_image: Some(height),
+//         },
+//         wgpu::Extent3d {
+//             width,
+//             height,
+//             depth_or_array_layers: 1,
+//         },
+//     );
+//     texture
+// }

@@ -1,28 +1,22 @@
 use std::error::Error;
 
+mod bind;
+mod blit;
+mod context;
+mod pp;
+mod utils;
+mod render;
+
 fn main() -> Result<(), Box<dyn Error>> {
     return winit::main();
 }
 
 mod winit {
-    use http_cache_reqwest::{CACacheManager, Cache, CacheMode, HttpCache, HttpCacheOptions};
     use serde::{Deserialize, Serialize};
     use std::error::Error;
-    use wgputoy::context::init_wgpu;
-    use wgputoy::WgpuToyRenderer;
-    use winit::{
-        event::{ElementState, Event, WindowEvent},
-        event_loop::ControlFlow,
-    };
-
-    use std::time;
-
-    const POLL_SLEEP_TIME: time::Duration = time::Duration::from_millis(10);
-
-    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-    enum Mode {
-        Poll,
-    }
+    use crate::context::init_wgpu;
+    use crate::render::WgpuToyRenderer;
+    use winit::event::{ElementState, Event, WindowEvent};
 
     #[derive(Serialize, Deserialize, Debug)]
     #[serde(rename_all = "camelCase")]
@@ -56,32 +50,29 @@ mod winit {
         };
         let shader = std::fs::read_to_string(&filename)?;
 
-        let client = reqwest_middleware::ClientBuilder::new(reqwest::Client::new())
-            .with(Cache(HttpCache {
-                mode: CacheMode::Default,
-                manager: CACacheManager::default(),
-                options: HttpCacheOptions::default(),
-            }))
-            .build();
 
         if let Ok(json) = std::fs::read_to_string(std::format!("{filename}.json")) {
             let metadata: ShaderMeta = serde_json::from_str(&json)?;
             println!("{:?}", metadata);
 
-            for (i, texture) in metadata.textures.iter().enumerate() {
-                let url = if texture.img.starts_with("http") {
-                    texture.img.clone()
-                } else {
-                    std::format!("https://compute.toys/{}", texture.img)
-                };
-                let resp = client.get(&url).send().await?;
-                let img = resp.bytes().await?.to_vec();
-                if texture.img.ends_with(".hdr") {
-                    wgputoy.load_channel_hdr(i, &img)?;
-                } else {
-                    wgputoy.load_channel(i, &img);
-                }
+            if !metadata.textures.is_empty() {
+                panic!("texture from url not supported");
             }
+
+            // for (i, texture) in metadata.textures.iter().enumerate() {
+            //     let url = if texture.img.starts_with("http") {
+            //         texture.img.clone()
+            //     } else {
+            //         std::format!("https://compute.toys/{}", texture.img)
+            //     };
+            //     let resp = client.get(&url).send().await?;
+            //     let img = resp.bytes().await?.to_vec();
+            //     if texture.img.ends_with(".hdr") {
+            //         wgputoy.load_channel_hdr(i, &img)?;
+            //     } else {
+            //         wgputoy.load_channel(i, &img);
+            //     }
+            // }
 
             let uniform_names: Vec<String> =
                 metadata.uniforms.iter().map(|u| u.name.clone()).collect();
@@ -93,7 +84,7 @@ mod winit {
             wgputoy.set_pass_f32(metadata.float32_enabled);
         }
 
-        if let Some(source) = wgputoy.preprocess_async(&shader).await {
+        if let Some(source) = wgputoy.preprocess(&shader) {
             println!("{}", source.source);
             wgputoy.compile(source);
         }
@@ -113,13 +104,10 @@ mod winit {
             device_clone.poll(wgpu::Maintain::Wait);
         });
 
-        let mode = Mode::Poll;
-        let mut close_requested = false;
-
         let _ = event_loop.run(move |event, elwt| match event {
             Event::WindowEvent { event, .. } => match event {
                 WindowEvent::CloseRequested => {
-                    close_requested = true;
+                    elwt.exit();
                 }
                 WindowEvent::CursorMoved { position, .. } => {
                     wgputoy.set_mouse_pos(
@@ -140,24 +128,10 @@ mod winit {
                     wgputoy.set_time_elapsed(time);
                     let future = wgputoy.render_async();
                     runtime.block_on(future);
+                    wgputoy.wgpu.window.request_redraw();
                 }
                 _ => (),
             },
-            Event::AboutToWait => {
-                wgputoy.wgpu.window.request_redraw();
-
-                match mode {
-                    Mode::Poll => {
-                        std::thread::sleep(POLL_SLEEP_TIME);
-                        elwt.set_control_flow(ControlFlow::Poll);
-                    }
-                    _ => (),
-                };
-
-                if close_requested {
-                    elwt.exit();
-                }
-            }
             _ => (),
         });
         Ok(())

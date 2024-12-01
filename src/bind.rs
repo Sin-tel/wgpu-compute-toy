@@ -1,4 +1,4 @@
-use crate::WgpuContext;
+use crate::context::WgpuContext;
 use bitvec::prelude::*;
 use std::mem::size_of;
 
@@ -88,10 +88,10 @@ impl TextureBinding {
     pub fn view(&self) -> &wgpu::TextureView {
         &self.view
     }
-    pub fn set_texture(&mut self, texture: wgpu::Texture) {
-        self.device = texture;
-        self.view = self.device.create_view(&Default::default());
-    }
+    // pub fn set_texture(&mut self, texture: wgpu::Texture) {
+    //     self.device = texture;
+    //     self.view = self.device.create_view(&Default::default());
+    // }
 }
 
 struct SamplerBinding {
