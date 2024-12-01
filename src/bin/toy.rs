@@ -1,17 +1,9 @@
 use std::error::Error;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    #[cfg(not(feature = "winit"))]
-    return Err("must be compiled with winit feature to run".into());
-
-    #[cfg(all(feature = "winit", not(target_arch = "wasm32")))]
     return winit::main();
-
-    #[cfg(all(feature = "winit", target_arch = "wasm32"))]
-    return Err("winit not supported on wasm target".into());
 }
 
-#[cfg(all(feature = "winit", not(target_arch = "wasm32")))]
 mod winit {
     use http_cache_reqwest::{CACacheManager, Cache, CacheMode, HttpCache, HttpCacheOptions};
     use serde::{Deserialize, Serialize};
@@ -23,12 +15,9 @@ mod winit {
         event_loop::ControlFlow,
     };
 
-    #[cfg(not(wasm_platform))]
     use std::time;
-    #[cfg(wasm_platform)]
-    use web_time as time;
 
-    const POLL_SLEEP_TIME: time::Duration = time::Duration::from_millis(100);
+    const POLL_SLEEP_TIME: time::Duration = time::Duration::from_millis(10);
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     enum Mode {
@@ -62,7 +51,8 @@ mod winit {
         let filename = if std::env::args().len() > 1 {
             std::env::args().nth(1).unwrap()
         } else {
-            "examples/default.wgsl".to_string()
+            // "examples/default.wgsl".to_string()
+            "examples/davidar/buddhabrot.wgsl".to_string()
         };
         let shader = std::fs::read_to_string(&filename)?;
 

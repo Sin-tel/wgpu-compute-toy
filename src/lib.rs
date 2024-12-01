@@ -4,7 +4,6 @@ pub mod context;
 mod pp;
 mod utils;
 
-#[cfg(feature = "winit")]
 use context::init_wgpu;
 use context::WgpuContext;
 use lazy_regex::regex;
@@ -13,38 +12,7 @@ use wgpu::PipelineCompilationOptions;
 use std::collections::HashMap;
 use std::mem::{size_of, take};
 use std::sync::atomic::{AtomicBool, Ordering};
-use wasm_bindgen::prelude::*;
 
-#[cfg(target_arch = "wasm32")]
-#[derive(Clone)]
-struct SuccessCallback(Option<js_sys::Function>);
-
-#[cfg(target_arch = "wasm32")]
-impl SuccessCallback {
-    fn call(&self, entry_points: Vec<String>) {
-        match self.0 {
-            None => log::error!("No success callback registered"),
-            Some(ref callback) => {
-                let res = callback.call1(
-                    &JsValue::NULL,
-                    &JsValue::from(
-                        entry_points
-                            .into_iter()
-                            .map(JsValue::from)
-                            .collect::<js_sys::Array>(),
-                    ),
-                );
-                match res {
-                    Err(error) => log::error!("Error calling registered error callback: {error:?}"),
-                    _ => (),
-                };
-            }
-        }
-    }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-struct SuccessCallback(Option<()>);
 
 struct ComputePipeline {
     name: String,
@@ -55,9 +23,7 @@ struct ComputePipeline {
     pipeline: wgpu::ComputePipeline,
 }
 
-#[wasm_bindgen]
 pub struct WgpuToyRenderer {
-    #[wasm_bindgen(skip)]
     pub wgpu: WgpuContext,
     screen_width: u32,
     screen_height: u32,
@@ -67,7 +33,6 @@ pub struct WgpuToyRenderer {
     compute_pipelines: Vec<ComputePipeline>,
     compute_bind_group: wgpu::BindGroup,
     compute_bind_group_layout: wgpu::BindGroupLayout,
-    on_success_cb: SuccessCallback,
     pass_f32: bool,
     screen_blitter: blit::Blitter,
     query_set: Option<wgpu::QuerySet>,
@@ -86,8 +51,6 @@ fn count_newlines(s: &str) -> usize {
 }
 
 // FIXME: async fn(&str) doesn't currently work with wasm_bindgen: https://stackoverflow.com/a/63655324/78204
-#[cfg(feature = "winit")]
-#[wasm_bindgen]
 pub async fn create_renderer(
     width: u32,
     height: u32,
@@ -124,7 +87,6 @@ impl WgpuToyRenderer {
             ),
             wgpu,
             bindings,
-            on_success_cb: SuccessCallback(None),
             pass_f32: false,
             query_set: None,
             last_stats: instant::Instant::now(),
@@ -135,34 +97,6 @@ impl WgpuToyRenderer {
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 impl WgpuToyRenderer {
-    #[cfg(target_arch = "wasm32")]
-    pub fn render(&mut self) {
-        use wgpu::SurfaceError;
-
-        match self.wgpu.surface.get_current_texture() {
-            Err(err) => match err {
-                SurfaceError::Lost | SurfaceError::Outdated => {
-                    log::error!("Unable to get framebuffer: {err}");
-                    self.wgpu
-                        .surface
-                        .configure(&self.wgpu.device, &self.wgpu.surface_config);
-                }
-                SurfaceError::OutOfMemory => log::error!("Out of GPU Memory!"),
-                SurfaceError::Timeout => log::warn!("Surface Timeout"),
-            },
-            Ok(f) => {
-                let (staging_buffer, _) = self.render_to(&f);
-                f.present();
-                wasm_bindgen_futures::spawn_local(Self::postrender(
-                    staging_buffer,
-                    self.screen_width * self.screen_height,
-                    self.source.assert_map.clone(),
-                ));
-            }
-        }
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
     pub async fn render_async(&mut self) {
         use wgpu::SurfaceError;
 
@@ -173,7 +107,6 @@ impl WgpuToyRenderer {
                     self.wgpu
                         .surface
                         .configure(&self.wgpu.device, &self.wgpu.surface_config);
-                    #[cfg(feature = "winit")]
                     self.wgpu.window.request_redraw();
                 }
                 SurfaceError::OutOfMemory => log::error!("Out of GPU Memory!"),
@@ -192,7 +125,6 @@ impl WgpuToyRenderer {
         }
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
     pub fn render_to_surface(
         &mut self,
         frame: &wgpu::SurfaceTexture,
@@ -229,7 +161,7 @@ impl WgpuToyRenderer {
             }
         }
         let mut dispatch_counter = 0;
-        for (pass_index, p) in self.compute_pipelines.iter().enumerate() {
+        for (_pass_index, p) in self.compute_pipelines.iter().enumerate() {
             if !p.dispatch_once || self.bindings.time.host.frame == 0 {
                 for i in 0..p.dispatch_count {
                     let mut compute_pass = encoder.begin_compute_pass(&Default::default());
@@ -454,23 +386,9 @@ fn passSampleLevelBilinearRepeat(pass_index: int, uv: float2, lod: float) -> flo
     }
 
     fn handle_success(&self, entry_points: Vec<String>) {
-        #[cfg(target_arch = "wasm32")]
-        self.on_success_cb.call(entry_points);
-        #[cfg(not(target_arch = "wasm32"))]
         log::info!("Entry points: {:?}", entry_points);
     }
 
-    #[cfg(target_arch = "wasm32")]
-    pub fn preprocess(&self, shader: &str) -> js_sys::Promise {
-        let shader = shader.to_owned();
-        let defines = HashMap::from([
-            ("SCREEN_WIDTH".to_owned(), self.screen_width.to_string()),
-            ("SCREEN_HEIGHT".to_owned(), self.screen_height.to_string()),
-        ]);
-        utils::promise(async move { pp::Preprocessor::new(defines).run(&shader).await })
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
     pub async fn preprocess_async(&self, shader: &str) -> Option<SourceMap> {
         let shader = shader.to_owned();
         let defines = HashMap::from([
@@ -612,12 +530,6 @@ fn passSampleLevelBilinearRepeat(pass_index: int, uv: float2, lod: float) -> flo
         self.bindings.keys.host.set(keycode, keydown);
     }
 
-    #[cfg(target_arch = "wasm32")]
-    pub fn set_custom_floats(&mut self, names: Vec<js_sys::JsString>, values: Vec<f32>) {
-        self.bindings.custom.host = (names.iter().map(From::from).collect(), values);
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
     pub fn set_custom_floats(&mut self, names: Vec<String>, values: Vec<f32>) {
         self.bindings.custom.host = (names, values);
     }
@@ -660,11 +572,6 @@ fn passSampleLevelBilinearRepeat(pass_index: int, uv: float2, lod: float) -> flo
             self.wgpu.surface_config.format,
             wgpu::FilterMode::Linear,
         );
-    }
-
-    #[cfg(target_arch = "wasm32")]
-    pub fn on_success(&mut self, callback: js_sys::Function) {
-        self.on_success_cb = SuccessCallback(Some(callback));
     }
 
     pub fn load_channel(&mut self, index: usize, bytes: &[u8]) {

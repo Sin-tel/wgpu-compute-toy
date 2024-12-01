@@ -4,16 +4,10 @@ version = "0.1.1"
 authors = ["David A Roberts <d@vidr.cc>"]
 edition = "2021"
 
-[lib]
-crate-type = ["cdylib", "rlib"]
-
-[features]
-default = ["console_error_panic_hook", "winit"]
-winit = ["dep:winit"]
+# [lib]
+# crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-wasm-bindgen = "0.2.84"
-wasm-bindgen-futures = "0.4.31"
 pollster = "0.3.0"
 bytemuck = { version = "1.9.1", features = ["derive"] }
 log = "0.4.17"
@@ -29,29 +23,13 @@ async-recursion = "1.0.0"
 snailquote = "0.3.1"
 indexmap = "2.2.5"
 
-# The `console_error_panic_hook` crate provides better debugging of panics by
-# logging them with `console.error`. This is great for development, but requires
-# all the `std::fmt` and `std::panicking` infrastructure, so isn't great for
-# code size when deploying.
-console_error_panic_hook = { version = "0.1.7", optional = true }
-
-
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-console_log = "1.0.0"
-js-sys = "0.3.57"
-web-sys = "0.3.57"
-gloo-utils = "0.2.0"
-gloo-net = "0.5.0"
-raw-window-handle = { version = "0.6.0", features = ["wasm-bindgen-0-2"] }
-
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 reqwest = "0.11.16"
 reqwest-middleware = "0.2.4"
 http-cache-reqwest = "0.13.0"
 tokio = { version = "1.27.0", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-winit = { version = "0.29.14", optional = true }
+winit = { version = "0.29.14" }
 
 [dependencies.wgpu]
 version = "0.20.0"
@@ -63,16 +41,9 @@ features = ["png", "jpeg", "hdr"]
 
 [dependencies.instant]
 version = "0.1.12"
-features = ["wasm-bindgen"]
 
 [dependencies.cached]
 version = "0.49.2"
 default-features = false
-features = ["proc_macro", "wasm", "async"]
+features = ["proc_macro", "async"]
 
-[dev-dependencies]
-wasm-bindgen-test = "0.3.31"
-
-[profile.release]
-# Tell `rustc` to optimize for small code size.
-opt-level = "s"

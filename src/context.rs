@@ -1,15 +1,9 @@
 use std::sync::Arc;
 
-#[cfg(target_arch = "wasm32")]
-use raw_window_handle::{
-    DisplayHandle, HandleError, HasDisplayHandle, HasWindowHandle, RawWindowHandle,
-    WebDisplayHandle, WebWindowHandle, WindowHandle,
-};
+
 
 pub struct WgpuContext {
-    #[cfg(all(not(target_arch = "wasm32"), feature = "winit"))]
     pub event_loop: Option<winit::event_loop::EventLoop<()>>,
-    #[cfg(all(not(target_arch = "wasm32"), feature = "winit"))]
     pub window: winit::window::Window,
     pub device: Arc<wgpu::Device>,
     pub queue: wgpu::Queue,
@@ -17,55 +11,7 @@ pub struct WgpuContext {
     pub surface_config: wgpu::SurfaceConfiguration,
 }
 
-#[cfg(target_arch = "wasm32")]
-struct CanvasWindow {
-    id: u32,
-}
 
-#[cfg(target_arch = "wasm32")]
-impl HasWindowHandle for CanvasWindow {
-    fn window_handle(&self) -> Result<WindowHandle<'_>, HandleError> {
-        unsafe {
-            Ok(WindowHandle::borrow_raw(RawWindowHandle::Web(
-                WebWindowHandle::new(self.id),
-            )))
-        }
-    }
-}
-
-#[cfg(target_arch = "wasm32")]
-impl HasDisplayHandle for CanvasWindow {
-    fn display_handle(&self) -> Result<DisplayHandle<'_>, HandleError> {
-        // FIXME: Use raw_window_handle::DisplayHandle::<'static>::web() once a new version of raw_window_handle is released
-        unsafe { Ok(DisplayHandle::borrow_raw(WebDisplayHandle::new().into())) }
-    }
-}
-
-#[cfg(target_arch = "wasm32")]
-fn init_window(bind_id: &str) -> Result<CanvasWindow, Box<dyn std::error::Error>> {
-    use crate::utils::set_panic_hook;
-    console_log::init(); // FIXME only do this once
-    set_panic_hook();
-    let win = web_sys::window().ok_or("window is None")?;
-    let doc = win.document().ok_or("document is None")?;
-    let element = doc
-        .get_element_by_id(bind_id)
-        .ok_or(format!("cannot find element {bind_id}"))?;
-    use wasm_bindgen::JsCast;
-    let canvas = element
-        .dyn_into::<web_sys::HtmlCanvasElement>()
-        .or(Err("cannot cast to canvas"))?;
-    canvas
-        .get_context("webgpu")
-        .or(Err("no webgpu"))?
-        .ok_or("no webgpu")?;
-    canvas
-        .set_attribute("data-raw-handle", "42")
-        .or(Err("cannot set attribute"))?;
-    Ok(CanvasWindow { id: 42 })
-}
-
-#[cfg(all(not(target_arch = "wasm32"), feature = "winit"))]
 fn init_window(
     size: winit::dpi::Size,
     event_loop: &winit::event_loop::EventLoop<()>,
@@ -79,19 +25,14 @@ fn init_window(
     Ok(window)
 }
 
-#[cfg(feature = "winit")]
-pub async fn init_wgpu(width: u32, height: u32, bind_id: &str) -> Result<WgpuContext, String> {
-    #[cfg(not(target_arch = "wasm32"))]
+pub async fn init_wgpu(width: u32, height: u32, _bind_id: &str) -> Result<WgpuContext, String> {
     let event_loop = winit::event_loop::EventLoop::new().map_err(|e| e.to_string())?;
-    #[cfg(not(target_arch = "wasm32"))]
+
     let window = init_window(
         winit::dpi::Size::Physical(winit::dpi::PhysicalSize::new(width, height)),
         &event_loop,
     )
     .map_err(|e| e.to_string())?;
-
-    #[cfg(target_arch = "wasm32")]
-    let window = init_window(bind_id).map_err(|e| e.to_string())?;
 
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
         backends: wgpu::Backends::PRIMARY,
@@ -146,9 +87,7 @@ pub async fn init_wgpu(width: u32, height: u32, bind_id: &str) -> Result<WgpuCon
     surface.configure(&device, &surface_config);
 
     Ok(WgpuContext {
-        #[cfg(all(not(target_arch = "wasm32"), feature = "winit"))]
         event_loop: Some(event_loop),
-        #[cfg(all(not(target_arch = "wasm32"), feature = "winit"))]
         window,
         device: Arc::new(device),
         queue,

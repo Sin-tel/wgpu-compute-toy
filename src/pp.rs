@@ -6,12 +6,6 @@ use async_recursion::async_recursion;
 use itertools::Itertools;
 use lazy_regex::*;
 use std::collections::HashMap;
-use wasm_bindgen::prelude::*;
-
-#[wasm_bindgen]
-extern "C" {
-    fn wgsl_error_handler(summary: &str, row: usize, col: usize);
-}
 
 pub struct WGSLError {
     summary: String,
@@ -23,9 +17,6 @@ impl WGSLError {
         Self { summary, line }
     }
     pub fn handler(summary: &str, row: usize, col: usize) {
-        #[cfg(target_arch = "wasm32")]
-        wgsl_error_handler(summary, row, col);
-        #[cfg(not(target_arch = "wasm32"))]
         panic!("{}:{}: {}", row, col, summary);
     }
     pub fn submit(&self) {
@@ -33,23 +24,14 @@ impl WGSLError {
     }
 }
 
-#[wasm_bindgen]
 pub struct SourceMap {
-    #[wasm_bindgen(skip)]
     pub extensions: String,
-    #[wasm_bindgen(skip)]
     pub source: String,
-    #[wasm_bindgen(skip)]
     pub map: Vec<usize>,
-    #[wasm_bindgen(skip)]
     pub workgroup_count: HashMap<String, [u32; 3]>,
-    #[wasm_bindgen(skip)]
     pub dispatch_once: HashMap<String, bool>,
-    #[wasm_bindgen(skip)]
     pub dispatch_count: HashMap<String, u32>,
-    #[wasm_bindgen(skip)]
     pub assert_map: Vec<usize>,
-    #[wasm_bindgen(skip)]
     pub user_data: indexmap::IndexMap<String, Vec<u32>>,
 }
 
