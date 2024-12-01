@@ -1,7 +1,5 @@
 use std::sync::Arc;
 
-
-
 pub struct WgpuContext {
     pub event_loop: Option<winit::event_loop::EventLoop<()>>,
     pub window: winit::window::Window,
@@ -10,7 +8,6 @@ pub struct WgpuContext {
     pub surface: wgpu::Surface<'static>,
     pub surface_config: wgpu::SurfaceConfiguration,
 }
-
 
 fn init_window(
     size: winit::dpi::Size,
@@ -21,6 +18,7 @@ fn init_window(
     );
     let window = winit::window::WindowBuilder::new()
         .with_inner_size(size)
+        // .with_fullscreen(Some(winit::window::Fullscreen::Borderless(None)))
         .build(event_loop)?;
     Ok(window)
 }

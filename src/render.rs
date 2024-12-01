@@ -1,14 +1,13 @@
-use crate::blit;
-use crate::pp;
 use crate::bind;
+use crate::blit;
 use crate::context::WgpuContext;
+use crate::pp;
 use crate::pp::{SourceMap, WGSLError};
 use lazy_regex::regex;
-use wgpu::PipelineCompilationOptions;
 use std::collections::HashMap;
 use std::mem::{size_of, take};
 use std::sync::atomic::{AtomicBool, Ordering};
-
+use wgpu::PipelineCompilationOptions;
 
 struct ComputePipeline {
     #[allow(dead_code)]
@@ -47,7 +46,6 @@ static SHADER_ERROR: AtomicBool = AtomicBool::new(false);
 fn count_newlines(s: &str) -> usize {
     s.as_bytes().iter().filter(|&&c| c == b'\n').count()
 }
-
 
 impl WgpuToyRenderer {
     pub fn new(wgpu: WgpuContext) -> WgpuToyRenderer {
@@ -111,7 +109,6 @@ impl WgpuToyRenderer {
             }
         }
     }
-
 
     fn render_to(
         &mut self,
@@ -507,6 +504,7 @@ fn passSampleLevelBilinearRepeat(pass_index: int, uv: float2, lod: float) -> flo
         self.bindings.mouse.host.click = if click { 1 } else { 0 };
     }
 
+    // TODO: add winit keyboard input
     // pub fn set_keydown(&mut self, keycode: usize, keydown: bool) {
     //     self.bindings.keys.host.set(keycode, keydown);
     // }
