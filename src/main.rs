@@ -8,7 +8,7 @@ mod utils;
 mod render;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    return winit::main();
+    winit::main()
 }
 
 mod winit {
@@ -105,36 +105,34 @@ mod winit {
             device_clone.poll(wgpu::Maintain::Wait);
         });
 
-        let _ = event_loop.run(move |event, elwt| match event {
-            Event::WindowEvent { event, .. } => match event {
-                WindowEvent::CloseRequested => {
-                    elwt.exit();
+        let _ = event_loop.run(move |event, elwt|
+            if let Event::WindowEvent { event, .. } = event { match event {
+            WindowEvent::CloseRequested => {
+                elwt.exit();
+            }
+            WindowEvent::CursorMoved { position, .. } => {
+                wgputoy.set_mouse_pos(
+                    position.x as f32 / screen_size.width as f32,
+                    position.y as f32 / screen_size.height as f32,
+                );
+            }
+            WindowEvent::MouseInput { state, .. } => {
+                wgputoy.set_mouse_click(state == ElementState::Pressed);
+            }
+            WindowEvent::Resized(size) => {
+                if size.width != 0 && size.height != 0 {
+                    wgputoy.resize(size.width, size.height, 1.);
                 }
-                WindowEvent::CursorMoved { position, .. } => {
-                    wgputoy.set_mouse_pos(
-                        position.x as f32 / screen_size.width as f32,
-                        position.y as f32 / screen_size.height as f32,
-                    );
-                }
-                WindowEvent::MouseInput { state, .. } => {
-                    wgputoy.set_mouse_click(state == ElementState::Pressed);
-                }
-                WindowEvent::Resized(size) => {
-                    if size.width != 0 && size.height != 0 {
-                        wgputoy.resize(size.width, size.height, 1.);
-                    }
-                }
-                WindowEvent::RedrawRequested => {
-                    let time = start_time.elapsed().as_micros() as f32 * 1e-6;
-                    wgputoy.set_time_elapsed(time);
-                    let future = wgputoy.render_async();
-                    runtime.block_on(future);
-                    wgputoy.wgpu.window.request_redraw();
-                }
-                _ => (),
-            },
+            }
+            WindowEvent::RedrawRequested => {
+                let time = start_time.elapsed().as_micros() as f32 * 1e-6;
+                wgputoy.set_time_elapsed(time);
+                let future = wgputoy.render_async();
+                runtime.block_on(future);
+                wgputoy.wgpu.window.request_redraw();
+            }
             _ => (),
-        });
+        } });
         Ok(())
     }
 }

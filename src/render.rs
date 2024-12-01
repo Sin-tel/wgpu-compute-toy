@@ -142,7 +142,7 @@ impl WgpuToyRenderer {
             }
         }
         let mut dispatch_counter = 0;
-        for (_pass_index, p) in self.compute_pipelines.iter().enumerate() {
+        for p in self.compute_pipelines.iter() {
             if !p.dispatch_once || self.bindings.time.host.frame == 0 {
                 for i in 0..p.dispatch_count {
                     let mut compute_pass = encoder.begin_compute_pass(&Default::default());

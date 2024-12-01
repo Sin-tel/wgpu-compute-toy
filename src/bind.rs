@@ -14,10 +14,11 @@ trait Binding {
     fn to_wgsl(&self) -> &str;
 }
 
+type Serialize<H> = Box<dyn Fn(&H) -> Vec<u8>>;
+
 pub struct BufferBinding<H> {
     pub host: H,
-    //serialise: Box<dyn for<'a> Fn(&'a H) -> &'a [u8]>,
-    serialise: Box<dyn Fn(&H) -> Vec<u8>>,
+    serialize: Serialize<H>,
     device: wgpu::Buffer,
     layout: wgpu::BindingType,
     bind: Box<dyn for<'a> Fn(&'a wgpu::Buffer) -> wgpu::BufferBinding<'a>>,
@@ -47,7 +48,7 @@ impl<H> BufferBinding<H> {
         &self.device
     }
     fn stage(&self, queue: &wgpu::Queue) {
-        let data = (self.serialise)(&self.host);
+        let data = (self.serialize)(&self.host);
         if !data.is_empty() {
             queue.write_buffer(&self.device, 0, &data)
         } else {
@@ -265,7 +266,7 @@ impl Bindings {
                     elapsed: 0.,
                     delta: 0.,
                 },
-                serialise: Box::new(|h| bytemuck::bytes_of(h).to_vec()),
+                serialize: Box::new(|h| bytemuck::bytes_of(h).to_vec()),
                 device: wgpu.device.create_buffer(&wgpu::BufferDescriptor {
                     label: None,
                     size: uniform_buffer_size::<Time>(),
@@ -281,7 +282,7 @@ impl Bindings {
                     pos: [width / 2, height / 2],
                     click: 0,
                 },
-                serialise: Box::new(|h| bytemuck::bytes_of(h).to_vec()),
+                serialize: Box::new(|h| bytemuck::bytes_of(h).to_vec()),
                 device: wgpu.device.create_buffer(&wgpu::BufferDescriptor {
                     label: None,
                     size: uniform_buffer_size::<Mouse>(),
@@ -294,7 +295,7 @@ impl Bindings {
             },
             keys: BufferBinding {
                 host: bitarr![u8, Lsb0; 0; 256],
-                serialise: Box::new(|h| h.as_raw_slice().to_vec()),
+                serialize: Box::new(|h| h.as_raw_slice().to_vec()),
                 device: wgpu.device.create_buffer(&wgpu::BufferDescriptor {
                     label: None,
                     size: uniform_buffer_size::<[u8; NUM_KEYCODES / 8]>(),
@@ -310,7 +311,7 @@ impl Bindings {
                     vec!["_dummy".into()], // just to avoid creating an empty struct in wgsl
                     vec![0.],
                 ),
-                serialise: Box::new(|(_, v)| {
+                serialize: Box::new(|(_, v)| {
                     v.iter()
                         .flat_map(|x| bytemuck::bytes_of(x).iter().copied())
                         .collect()
@@ -327,7 +328,7 @@ impl Bindings {
             },
             user_data: BufferBinding {
                 host: indexmap::IndexMap::from([("_dummy".into(), vec![0])]),
-                serialise: Box::new(|h| {
+                serialize: Box::new(|h| {
                     h.iter()
                         .flat_map(|(_, x)| bytemuck::cast_slice(x).iter().copied())
                         .collect()
@@ -349,7 +350,7 @@ impl Bindings {
 
             storage1: BufferBinding {
                 host: (),
-                serialise: Box::new(|_| vec![]),
+                serialize: Box::new(|_| vec![]),
                 device: wgpu.device.create_buffer(&wgpu::BufferDescriptor {
                     label: None,
                     size: 134217728, // default limit (128 MiB)
@@ -362,7 +363,7 @@ impl Bindings {
             },
             storage2: BufferBinding {
                 host: (),
-                serialise: Box::new(|_| vec![]),
+                serialize: Box::new(|_| vec![]),
                 device: wgpu.device.create_buffer(&wgpu::BufferDescriptor {
                     label: None,
                     size: 134217728, // default limit (128 MiB)
@@ -375,7 +376,7 @@ impl Bindings {
             },
             debug_buffer: BufferBinding {
                 host: (),
-                serialise: Box::new(|_| vec![]),
+                serialize: Box::new(|_| vec![]),
                 device: wgpu.device.create_buffer(&wgpu::BufferDescriptor {
                     label: None,
                     size: uniform_buffer_size::<[u32; NUM_ASSERT_COUNTERS]>(),
@@ -390,7 +391,7 @@ impl Bindings {
             },
             dispatch_info: BufferBinding {
                 host: (),
-                serialise: Box::new(|_| vec![]),
+                serialize: Box::new(|_| vec![]),
                 device: wgpu.device.create_buffer(&wgpu::BufferDescriptor {
                     label: None,
                     size: 256 * OFFSET_ALIGNMENT as u64,

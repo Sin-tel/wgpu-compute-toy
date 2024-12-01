@@ -166,9 +166,9 @@ impl Preprocessor {
                         .trim()
                         .split(' ')
                         .nth(1)
-                        .ok_or(WGSLError::new(format!("Parse error"), n))?;
+                        .ok_or(WGSLError::new("Parse error".to_string(), n))?;
                     let r = tokens[2..].join(" ");
-                    if self.defines.get(l).is_some() {
+                    if self.defines.contains_key(l) {
                         return Err(WGSLError::new(format!("Cannot redefine {l}"), n));
                     }
                     self.defines.insert(l.to_string(), r);
