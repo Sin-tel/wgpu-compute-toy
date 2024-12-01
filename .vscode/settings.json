@@ -1,6 +1,0 @@
-{
-    //"rust-analyzer.cargo.target": "wasm32-unknown-unknown"
-    "rust-analyzer.runnableEnv": {
-        "RUSTFLAGS": "--cfg=web_sys_unstable_apis"
-    }
-}
